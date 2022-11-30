@@ -79,33 +79,35 @@ def exist_sol(seq, bound):
     return sol.is_sat
 
 
+
 def compute_max_score(seq):
     seq = Sequence(seq)
     solver = FoldingSolver(seq)
     if incremental:
-        bound = 0
-        while solver.solve(bound).is_sat:
-            bound += 1
-        bound -= 1
-        while bound > 0:
+        max_bound = get_max_score_bound_for_length(seq.number_of_1s)
+        min_bound = 0
+        bound = 1
+        while bound <= max_bound:
             if solver.solve(bound).is_sat:
-                return bound
-            bound -= 1
-        return 0
+                min_bound = bound
+            else:
+                max_bound = bound - 1
+            bound *= 2
+        return min_bound
+
     else:
         max_bound = get_max_score_bound_for_length(seq.number_of_1s)
         min_bound = 0
-        bound = int(max_bound / 2)
-
         while max_bound - min_bound > 1:
+            bound = (max_bound + min_bound) // 2
             if solver.solve(bound).is_sat:
                 min_bound = bound
             else:
                 max_bound = bound
-            bound = int((max_bound + min_bound) / 2)
-        if(min_bound == 0):
-            return 0
-        return min_bound
+        if(max_bound == min_bound):
+            return max_bound
+        else:
+            return min_bound+1 if solver.solve(min_bound).is_sat else max_bound
 
 
 
@@ -173,82 +175,82 @@ def test_code():
     total_maxscores = 0
     timeouts_maxscores = 0
     exceptions_maxscores = 0
-
-    # sur cet ensemble de tests, votre methode devrait toujours retourner qu'il existe une solution
-    print("\n****** Test de satisfiabilite ******\n")
-    for (seq, maxbound) in examples:
-        # initialize queue
-        queue = multiprocessing.Queue()
-        queue.put(ret)
-        ret = queue.get()
-        ret["exist_sol"] = None
-        queue.put(ret)
-
-        # increase counter
-        total_sat_tests += 1
-        # set bound
-        bound = int(maxbound / 2)
-        print("sequence: " + seq + " borne: " + str(bound), end='')
-        sys.stdout.flush()
-
-        p = multiprocessing.Process(target=worker_exist_sol, args=(queue, seq, bound))
-        p.start()
-        p.join(timeout=TIMEOUT)
-
-        if p.exitcode is None:
-            print(" ---> timeout")
-            timeouts_sat_tests += 1
-            p.terminate()
-        else:
-            r = queue.get()["exist_sol"]
-            if isinstance(r, Exception):
-                exceptions_sat_tests += 1
-                print(" ---> exception raised")
-            else:
-                if r == True:
-                    sat_tests_success += 1
-                    print(" ---> succes")
-                else:
-                    sat_tests_failure += 1
-                    print(" ---> echec")
-
-    # sur cet ensemble de tests, votre methode devrait toujours retourner qu'il n'existe pas de solution
-    print("\n****** Test de d'insatisfiabilite ******\n")
-    for (seq, maxbound) in examples:
-        # initialize queue
-        queue = multiprocessing.Queue()
-        queue.put(ret)
-        ret = queue.get()
-        ret["exist_sol"] = None
-        queue.put(ret)
-
-        # increase counter
-        total_unsat_tests += 1
-        # set bound
-        bound = maxbound + 1
-        print("sequence: " + seq + " borne: " + str(bound), end='')
-        sys.stdout.flush()
-
-        p = multiprocessing.Process(target=worker_exist_sol, args=(queue, seq, bound))
-        p.start()
-        p.join(timeout=TIMEOUT)
-
-        if p.exitcode is None:
-            print(" ---> timeout")
-            timeouts_unsat_tests += 1
-            p.terminate()
-        else:
-            r = queue.get()["exist_sol"]
-            if isinstance(r, Exception):
-                exceptions_unsat_tests += 1
-                print(" ---> exception raised")
-            else:
-                if r == True:
-                    unsat_tests_failure += 1
-                    print(" ---> echec")
-                else:
-                    unsat_tests_success += 1
-                    print(" ---> succes")
+    #
+    # # sur cet ensemble de tests, votre methode devrait toujours retourner qu'il existe une solution
+    # print("\n****** Test de satisfiabilite ******\n")
+    # for (seq, maxbound) in examples:
+    #     # initialize queue
+    #     queue = multiprocessing.Queue()
+    #     queue.put(ret)
+    #     ret = queue.get()
+    #     ret["exist_sol"] = None
+    #     queue.put(ret)
+    #
+    #     # increase counter
+    #     total_sat_tests += 1
+    #     # set bound
+    #     bound = int(maxbound / 2)
+    #     print("sequence: " + seq + " borne: " + str(bound), end='')
+    #     sys.stdout.flush()
+    #
+    #     p = multiprocessing.Process(target=worker_exist_sol, args=(queue, seq, bound))
+    #     p.start()
+    #     p.join(timeout=TIMEOUT)
+    #
+    #     if p.exitcode is None:
+    #         print(" ---> timeout")
+    #         timeouts_sat_tests += 1
+    #         p.terminate()
+    #     else:
+    #         r = queue.get()["exist_sol"]
+    #         if isinstance(r, Exception):
+    #             exceptions_sat_tests += 1
+    #             print(" ---> exception raised")
+    #         else:
+    #             if r == True:
+    #                 sat_tests_success += 1
+    #                 print(" ---> succes")
+    #             else:
+    #                 sat_tests_failure += 1
+    #                 print(" ---> echec")
+    #
+    # # sur cet ensemble de tests, votre methode devrait toujours retourner qu'il n'existe pas de solution
+    # print("\n****** Test de d'insatisfiabilite ******\n")
+    # for (seq, maxbound) in examples:
+    #     # initialize queue
+    #     queue = multiprocessing.Queue()
+    #     queue.put(ret)
+    #     ret = queue.get()
+    #     ret["exist_sol"] = None
+    #     queue.put(ret)
+    #
+    #     # increase counter
+    #     total_unsat_tests += 1
+    #     # set bound
+    #     bound = maxbound + 1
+    #     print("sequence: " + seq + " borne: " + str(bound), end='')
+    #     sys.stdout.flush()
+    #
+    #     p = multiprocessing.Process(target=worker_exist_sol, args=(queue, seq, bound))
+    #     p.start()
+    #     p.join(timeout=TIMEOUT)
+    #
+    #     if p.exitcode is None:
+    #         print(" ---> timeout")
+    #         timeouts_unsat_tests += 1
+    #         p.terminate()
+    #     else:
+    #         r = queue.get()["exist_sol"]
+    #         if isinstance(r, Exception):
+    #             exceptions_unsat_tests += 1
+    #             print(" ---> exception raised")
+    #         else:
+    #             if r == True:
+    #                 unsat_tests_failure += 1
+    #                 print(" ---> echec")
+    #             else:
+    #                 unsat_tests_success += 1
+    #                 print(" ---> succes")
 
     # sur cet ensemble de tests, votre methode devrait retourner le meilleur score. Vous pouvez utiliser la methode par dichotomie ou incrementale, au choix
     print("\n****** Test de calcul du meilleur score ******\n")
