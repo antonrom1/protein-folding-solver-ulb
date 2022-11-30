@@ -35,6 +35,8 @@ from pysat.solvers import Glucose4
 #
 # l'option -v vous permet de creer un mode 'verbose'
 # si l'option -t est active, alors le code execute uniquement la fonction test_code() implementee ci-dessous, qui vous permet de tester votre code avec des exemples deja fournis. Si l'execution d'un test prend plus que TIMEOUT secondes (fixe a 10s ci-dessous), alors le test s'arrete et la fonction passe au test suivant
+from src.folding import FoldingSolver
+from src.sequence import Sequence
 
 parser = OptionParser()
 parser.add_option("-s", "--sequence", dest="seq", action="store",
@@ -45,125 +47,36 @@ parser.add_option("-p", "--print", dest="affichage_sol", action="store_true",
                   help="print solution", default=False)
 parser.add_option("-i", "--incremental", dest="incremental", action="store_true",
                   help="incremental mode: try small bounds first and increment", default=False)
-parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
-                  help="verbose mode", default=False)
+parser.add_option("-v", "--verbose", dest="loglevel", action="store_const",
+                  help="verbose mode", const=logging.INFO, default=logging.WARNING)
 parser.add_option("-t", "--test", dest="test", action="store_true",
                   help="testing mode", default=False)
-parser.add_option("-d", "--debug", dest="debug", action="store_true",
-                  help="debug logging", default=False)
+parser.add_option("-d", "--debug", dest="loglevel", action="store_const",
+                    help="debug mode", const=logging.DEBUG)
 
 (options, args) = parser.parse_args()
 
 affichage_sol = options.affichage_sol
-verb = options.verbose
 incremental = options.incremental
 test = options.test
 idp = IDPool()
-logging.basicConfig(level=logging.DEBUG if options.debug else (logging.INFO if options.verbose else logging.WARNING))
+logging.basicConfig(level=options.loglevel)
+logger = logging.getLogger(__name__)
+
 
 ###############################################################################################
 
 
-def max_bound_for_seq_of_length(n):
-    from math import sqrt
-    from math import ceil
-    return ceil(2 * (sqrt(n) - 1) * sqrt(n))
-
-
-
-
 def exist_sol(seq, bound):
-    if not seq.isnumeric():
-        raise ValueError("Sequence must be numeric")
-
-    # eliminate simple cases
-    if bound > max_bound_for_seq_of_length(len(seq)):
-        return False
-
-    # trivial case of only '1' in sequence
-    if all(x == '1' for x in seq) and bound < max_bound_for_seq_of_length(len(seq)):
-        return True
-
-    cnf = CNF()
-    indices = set(range(len(seq)))
-    possible_matrix_values = indices | {None, }
-
-
-    logging.info("check if every matrix position has only one value")
-    for i, j in itertools.product(range(len(seq)), repeat=2):
-        cnf.extend(CardEnc.equals([idp.id((i, j, v)) for v in possible_matrix_values], 1, vpool=idp))
-
-    only_one_value_per_position_clauses_count = len(cnf.clauses)
-    logging.debug(f'Generated {only_one_value_per_position_clauses_count} clauses for "only one value per position"')
-
-
-    logging.info("check if every value (except None) appears only once")
-    for v in possible_matrix_values - {None}:
-        cnf.extend(CardEnc.equals([idp.id((i, j, v)) for i, j in itertools.product(range(len(seq)), repeat=2)], 1, vpool=idp))
-
-    only_one_index_in_matrix_clauses_count = len(cnf.clauses) - only_one_value_per_position_clauses_count
-    logging.debug(f'Generated {only_one_index_in_matrix_clauses_count} clauses for "only one index in matrix"')
-
-
-    logging.info("check if every value is adjacent to its neighbours")
-    # check whether i is adjacent to i - 1 and i + 1
-    for i, j in itertools.product(range(len(seq)), repeat=2):
-        # TODO: this can be optimized by skipping 1/2 of the values because they are already checked
-        for v in range(1, len(seq) - 1):
-            # [(i, j, v) => [(i - 1, j, v - 1) | (i + 1, j, v - 1) | (i, j - 1, v - 1) | (i, j + 1, v - 1)]]
-            # a => (b | c | d | e) <=> !a | b | c | d | e
-
-            v1p1_clause = [-idp.id((i, j, v))]
-            v1m1_clause = [-idp.id((i, j, v))]
-
-            for i2, j2 in [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]:
-                if 0 <= i2 < len(seq) and 0 <= j2 < len(seq):
-                    v1p1_clause.append(idp.id((i2, j2, v - 1)))
-                    v1m1_clause.append(idp.id((i2, j2, v + 1)))
-            cnf.append(v1m1_clause)
-            cnf.append(v1p1_clause)
-
-    adjacent_values_clauses_count = len(cnf.clauses) - only_one_value_per_position_clauses_count - only_one_index_in_matrix_clauses_count
-    logging.debug(f'Generated {adjacent_values_clauses_count} clauses for "adjacent values"')
-
-    logging.info("check if there are at least 'bound' adjacent 1s")
-    # we have to user card.atleast here
-    clauses_for_atleast = []
-    for i, j in itertools.product(range(len(seq)), repeat=2):
-        # indices of the 1s in the sequence
-        if (i + j) % 2 == 0:
-            continue
-        indices_of_1s = [i for i, v in enumerate(seq) if v == '1']
-        for v1, v2 in itertools.combinations(indices_of_1s, 2):
-            for i2, j2 in [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]:
-                if not (0 <= i2 < len(seq) and 0 <= j2 < len(seq)):
-                    continue
-                a = idp.id((i, j, v1))
-                b = idp.id((i2, j2, v2))
-                c = idp.id(((i, i2), (j, j2), (v1, v2)))
-                # append (a & b) <=> c
-                # (¬c ∨ a) ∧ (¬c ∨ b) ∧ (¬a ∨ ¬b ∨ c)
-                cnf.extend([[-c, a], [-c, b], [a, b, -c]])
-                clauses_for_atleast.append(c)
-
-    if bound > len(clauses_for_atleast):
-        return False
-
-    cnf.extend(CardEnc.atleast(clauses_for_atleast, bound, vpool=idp))
-
-    atleast_clauses_count = len(cnf.clauses) - only_one_value_per_position_clauses_count - only_one_index_in_matrix_clauses_count - adjacent_values_clauses_count
-    logging.debug(f'Generated {atleast_clauses_count} clauses for "atleast"')
-
-    logging.info(f"A total of {len(cnf.clauses)} clauses were generated")
-
-    # we solve the problem
-    logging.debug("solving...")
-    s = Glucose4(use_timer=True)
-    s.append_formula(cnf.clauses, no_return=True)
-    s.solve()
-    logging.debug("done")
-
-    return s.get_model() is not None
+    """return True if there is a solution with score >= bound"""
+    sequence = Sequence(seq)
+    sol = FoldingSolver(sequence).solve(bound)
+    if options.affichage_sol:
+        if sol.is_sat:
+            print(sol.solution)
+        else:
+            print("No solution found")
+    return sol.is_sat
 
 
 def compute_max_score(
@@ -198,18 +111,6 @@ def worker_max_score(queue, seq):
 
 
 def test_code():
-    # maxlength = 25
-    # m = 2
-    # l = []
-    # for n in range(maxlength):
-    # for i in range(m):
-    # seq = gen(n+2)
-    # print(seq)
-    # b = compute_max_score(seq)
-    # print(int(b))
-    # l.append((seq,b))
-    # print(l)
-
     examples = [('00', 0), ('1', 0), ('01000', 0), ('00110000', 1), ('11', 1), ('111', 2), ('1111', 4), ('1111111', 8),
                 ("111111111111111", 22), ("1011011011", 7), ("011010111110011", 12), ("01101011111000101", 11),
                 ("0110111001000101", 8), ("000000000111000000110000000", 5), ('100010100', 0),
@@ -400,50 +301,11 @@ if __name__ == '__main__':
         # cas ou la borne est fournie en entree: on test si la sequence (qui doit etre donnee en entree) a un score superieur ou egal a la borne donnee
         # si oui, on affiche "SAT". Si l'option d'affichage est active, alors il faut egalement afficher une solution
         seq = options.seq
-        print("DEBUT DU TEST DE SATISFIABILITE")
-        if exist_sol(options.seq, options.bound):
+        logger.debug(f"Searching for a solution for sequence {seq} with bound {options.bound}")
+        if exist_sol(seq, options.bound):
             print("SAT")
-            # print(model)
-            # model_set = set(model)
-            # output_table = [['-'] * len(seq) for _ in range(len(seq))]
-            # for i, j in itertools.product(range(len(seq)), repeat=2):
-            #     for v in range(len(seq)):
-            #         if idp.id((i, j, v)) in model_set:
-            #             if output_table[i][j] != '-':
-            #                 print("ERROR: multiple values for cell (" + str(i) + "," + str(j) + ")")
-            #                 exit(1)
-            #             output_table[i][j] = seq[v]
-            # print(*output_table, sep='\n')
-            #
-            # cs = []
-            # for i, j in itertools.product(range(len(seq)), repeat=2):
-            #     # indices of the 1s in the sequence
-            #     indices_of_1s = [i for i, v in enumerate(seq) if v == '1']
-            #     for v1, v2 in itertools.combinations(indices_of_1s, 2):
-            #         for i2, j2 in [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]:
-            #             if not (0 <= i2 < len(seq) and 0 <= j2 < len(seq)):
-            #                 continue
-            #             a = idp.id((i, j, v1))
-            #             b = idp.id((i + i2, j + j2, v2))
-            #             i1i2_sorted = (i, i2)# if i < i2 else (i2, i)
-            #             j1j2_sorted = (j, j2)# if j < j2 else (j2, j)
-            #             v1v2_sorted = (v1, v2)# if v1 < v2 else (v2, v1)
-            #             c = idp.id((i1i2_sorted, j1j2_sorted, v1v2_sorted))
-            #             cs.append(c)
-            # print(len(cs), "cs in total")
-            #
-            # num_cs_true = 0
-            # for c in cs:
-            #     if c in model_set:
-            #         num_cs_true += 1
-            #
-            # print(num_cs_true, "cs are true")
-
-
-
         else:
             print("UNSAT")
-        print("FIN DU TEST DE SATISFIABILITE")
 
     elif not (incremental):
         # on affiche le score maximal qu'on calcule par dichotomie
