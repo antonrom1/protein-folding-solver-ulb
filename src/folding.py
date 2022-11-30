@@ -210,7 +210,3 @@ if __name__ == "__main__":
     import doctest
 
     doctest.testmod()
-
-    s = sequence.Sequence('1110101101')
-    solver = FoldingSolver(s)
-    print(solver.solve(7).solution)
