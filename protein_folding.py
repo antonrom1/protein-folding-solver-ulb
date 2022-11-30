@@ -11,7 +11,6 @@ from optparse import OptionParser
 from pprint import pp
 
 from pysat.card import *
-
 from pysat.solvers import Glucose4
 
 ##### OPTIONS POUR L'UTILISATION EN LIGNE DE COMMANDE ###############
@@ -37,6 +36,7 @@ from pysat.solvers import Glucose4
 # si l'option -t est active, alors le code execute uniquement la fonction test_code() implementee ci-dessous, qui vous permet de tester votre code avec des exemples deja fournis. Si l'execution d'un test prend plus que TIMEOUT secondes (fixe a 10s ci-dessous), alors le test s'arrete et la fonction passe au test suivant
 from src.folding import FoldingSolver
 from src.sequence import Sequence
+from src.utils import get_max_score_bound_for_length
 
 parser = OptionParser()
 parser.add_option("-s", "--sequence", dest="seq", action="store",
@@ -79,10 +79,35 @@ def exist_sol(seq, bound):
     return sol.is_sat
 
 
-def compute_max_score(
-        seq):  # calcul le meilleur score pour la sequence seq, il doit donc retourne un entier, methode utilisee: dichotomie par defaut, incrementale si l'option -i est active
-    # A COMPLETER
-    return (10)  # a modifier
+def compute_max_score(seq):
+    seq = Sequence(seq)
+    solver = FoldingSolver(seq)
+    if incremental:
+        bound = 0
+        while solver.solve(bound).is_sat:
+            bound += 1
+        bound -= 1
+        while bound > 0:
+            if solver.solve(bound).is_sat:
+                return bound
+            bound -= 1
+        return 0
+    else:
+        max_bound = get_max_score_bound_for_length(seq.number_of_1s)
+        min_bound = 0
+        bound = int(max_bound / 2)
+
+        while max_bound - min_bound > 1:
+            if solver.solve(bound).is_sat:
+                min_bound = bound
+            else:
+                max_bound = bound
+            bound = int((max_bound + min_bound) / 2)
+        if(min_bound == 0):
+            return 0
+        return min_bound
+
+
 
 
 ####################################################################
@@ -311,12 +336,13 @@ if __name__ == '__main__':
         # on affiche le score maximal qu'on calcule par dichotomie
         # on affiche egalement un plongement de score maximal si l'option d'affichage est active
         print("DEBUT DU CALCUL DU MEILLEUR SCORE PAR DICHOTOMIE")
-        # A COMPLETER
+
+        print(compute_max_score(options.seq))
         print("FIN DU CALCUL DU MEILLEUR SCORE")
 
     elif not test:
         # Pareil que dans le cas precedent mais avec la methode incrementale
         # A COMPLETER
         print("DEBUT DU CALCUL DU MEILLEUR SCORE PAR METHODE INCREMENTALE")
-        # A COMPLETER
+        print(compute_max_score(options.seq))
         print("FIN DU CALCUL DU MEILLEUR SCORE")
