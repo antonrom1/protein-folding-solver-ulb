@@ -6,6 +6,7 @@ import logging
 import multiprocessing
 import sys
 import time
+from itertools import count
 from optparse import OptionParser
 
 from pysat.card import *
@@ -79,13 +80,16 @@ def compute_max_score(seq):
     solver = FoldingSolver(seq)
     if incremental:
         max_bound = get_max_score_bound_for_length(seq.number_of_1s)
-        bound = 0
         solutions = []
-        while bound <= max_bound and (not solutions or solutions[-1].is_sat):
-            solutions.append(solver.solve(bound))
-            bound += 1
 
-        solution = next((s for s in reversed(solutions) if s.is_sat))
+        for i in range(0, max_bound + 1):
+            sol = solver.solve(i)
+            if sol.is_sat:
+                solutions.append(sol)
+            else:
+                break
+
+        solution = solutions[-1]
 
         if options.affichage_sol:
             print(solution.solution)
