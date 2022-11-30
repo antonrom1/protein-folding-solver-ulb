@@ -2,31 +2,13 @@
 # PROJET: repliage de proteines
 
 # necessite l'installation de la librairie PySAT et de la librairie func_timeout
-import itertools
 import logging
 import multiprocessing
 import sys
 import time
 from optparse import OptionParser
-from pprint import pp
 
 from pysat.card import *
-from pysat.solvers import Glucose4
-
-##### OPTIONS POUR L'UTILISATION EN LIGNE DE COMMANDE ###############
-
-# Usage: folder.py [options]
-
-# Options:
-# -h, --help            show this help message and exit
-# -s SEQ, --sequence=SEQ
-# specify the input sequence
-# -b BOUND, --bound=BOUND
-# specify a lower bound on the score
-# -p, --print           print solution
-# -i, --incremental     incremental mode: try small bounds first and increment
-# -v, --verbose         verbose mode
-# -t, --test            testing mode
 
 # on doit TOUJOURS donner une sequence
 # * lorsqu'une borne est donnee, votre programme doit tester que le meilleur score de la sequence est superieur ou egale a cette borne
@@ -37,6 +19,19 @@ from pysat.solvers import Glucose4
 from src.folding import FoldingSolver
 from src.sequence import Sequence
 from src.utils import get_max_score_bound_for_length
+
+##### OPTIONS POUR L'UTILISATION EN LIGNE DE COMMANDE ###############
+# Usage: folder.py [options]
+# Options:
+# -h, --help            show this help message and exit
+# -s SEQ, --sequence=SEQ
+# specify the input sequence
+# -b BOUND, --bound=BOUND
+# specify a lower bound on the score
+# -p, --print           print solution
+# -i, --incremental     incremental mode: try small bounds first and increment
+# -v, --verbose         verbose mode
+# -t, --test            testing mode
 
 parser = OptionParser()
 parser.add_option("-s", "--sequence", dest="seq", action="store",
@@ -52,7 +47,7 @@ parser.add_option("-v", "--verbose", dest="loglevel", action="store_const",
 parser.add_option("-t", "--test", dest="test", action="store_true",
                   help="testing mode", default=False)
 parser.add_option("-d", "--debug", dest="loglevel", action="store_const",
-                    help="debug mode", const=logging.DEBUG)
+                  help="debug mode", const=logging.DEBUG)
 
 (options, args) = parser.parse_args()
 
@@ -79,37 +74,51 @@ def exist_sol(seq, bound):
     return sol.is_sat
 
 
-
 def compute_max_score(seq):
     seq = Sequence(seq)
     solver = FoldingSolver(seq)
     if incremental:
         max_bound = get_max_score_bound_for_length(seq.number_of_1s)
-        min_bound = 0
-        bound = 1
-        while bound <= max_bound:
-            if solver.solve(bound).is_sat:
-                min_bound = bound
-            else:
-                max_bound = bound - 1
-            bound *= 2
-        return min_bound
+        bound = 0
+        solutions = []
+        while bound <= max_bound and (not solutions or solutions[-1].is_sat):
+            solutions.append(solver.solve(bound))
+            bound += 1
+
+        solution = next((s for s in reversed(solutions) if s.is_sat))
+
+        if options.affichage_sol:
+            print(solution.solution)
+
+        return solution.bound
 
     else:
         max_bound = get_max_score_bound_for_length(seq.number_of_1s)
         min_bound = 0
-        while max_bound - min_bound > 1:
-            bound = (max_bound + min_bound) // 2
-            if solver.solve(bound).is_sat:
-                min_bound = bound
+        solution = None
+        while min_bound < max_bound:
+            bound = (min_bound + max_bound) // 2
+            solution = solver.solve(bound)
+            if solution.is_sat:
+                min_bound = bound + 1
             else:
                 max_bound = bound
-        if(max_bound == min_bound):
-            return max_bound
-        else:
-            return min_bound+1 if solver.solve(min_bound).is_sat else max_bound
 
+        previous_solution = solution
 
+        solution = solver.solve(min_bound)
+
+        if solution.is_unsat:
+            solution = previous_solution
+
+        if options.affichage_sol:
+            if solution.is_sat:
+                print(solution.solution)
+            else:
+                logger.error("No solution found")
+                return 0
+
+        return solution.bound
 
 
 ####################################################################
