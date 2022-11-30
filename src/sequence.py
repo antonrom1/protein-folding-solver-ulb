@@ -20,14 +20,23 @@ class Sequence:
         validators.validate_sequence(sequence)
 
         self.sequence = sequence
-        self._n1s = self.sequence.count("1")
-        self._n0s = self.sequence.count("0")
 
         self._n = len(sequence)
+        self._n1s = self.sequence.count("1")
+        self._n0s = self.n - self.number_of_1s
+
 
     @property
     def n(self):
         return self._n
+
+    @property
+    def number_of_1s(self):
+        return self._n1s
+
+    @property
+    def number_of_0s(self):
+        return self._n0s
 
     @property
     def is_all_ones(self):

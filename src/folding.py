@@ -25,6 +25,9 @@ from src import sequence, utils
 from src.encoder import Encoder
 
 
+logger = logging.getLogger(__name__)
+
+
 class FoldedProtein:
     """
     FoldedProtein is a class that represents a folded protein.
@@ -121,7 +124,7 @@ class FoldingSolution:
 class FoldingSolver:
     def __init__(self, seq: sequence.Sequence):
         self._sequence = seq
-        self._max_possible_score = utils.get_max_score_bound_for_length(self.sequence.n)
+        self._max_possible_bound = utils.get_max_score_bound_for_length(self.sequence.number_of_1s)
 
     @property
     def sequence(self):
@@ -129,7 +132,7 @@ class FoldingSolver:
 
     @property
     def max_possible_score(self):
-        return self._max_possible_score
+        return self._max_possible_bound
 
     def solve(self, bound) -> FoldingSolution:
         if (res := self._test_for_trivial_cases(bound)) is not None:
@@ -185,18 +188,21 @@ class FoldingSolver:
         """
         if self.sequence.is_all_ones:
             if bound <= self.max_possible_score:
+                logger.info("Trivial solution: Sequence is all ones, and bound is less than max possible score.")
                 return FoldingSolution(self.sequence, bound, FoldedProtein.from_all_ones(self.sequence.n))
         elif self.sequence.is_all_zeros:
             if bound == 0:
+                logger.info("Trivial solution: Sequence is all zeros, and bound is 0.")
                 return FoldingSolution(self.sequence, bound, FoldedProtein.from_all_zeros(self.sequence.n))
-            else:
-                return FoldingSolution(self.sequence, bound, None)
 
-        if bound >= self.max_possible_score:
-            # only full ones sequences can have a score of max_possible_score
+        if bound > self.max_possible_score:
+            logger.info("Trivial solution: Bound is greater than max possible score.")
             return FoldingSolution(self.sequence, bound, None)
 
-        if self.sequence.get_flat_sequence_score() >= bound:
+        assert (flat_sequence_score := self.sequence.get_flat_sequence_score()) <= self.max_possible_score
+
+        if flat_sequence_score >= bound:
+            logger.info("Trivial solution: Flat sequence score is greater than bound.")
             return FoldingSolution(self.sequence, bound, FoldedProtein.from_straight_sequence(self.sequence.sequence))
 
 

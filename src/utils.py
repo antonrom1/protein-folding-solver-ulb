@@ -33,7 +33,7 @@ def get_max_score_bound_for_length(n):
     >>> list(map(get_max_score_bound_for_length, range(1, 26)))
     [0, 1, 2, 4, 5, 7, 8, 10, 12, 13, 15, 17, 18, 20, 22, 24, 25, 27, 29, 31, 32, 34, 36, 38, 40]
     """
-    return (m := n << 1) - 1 - math.isqrt((m << 1) - 1)
+    return (m := n << 1) - 1 - math.isqrt((m << 1) - 1) if n > 0 else 0
 
 
 if __name__ == '__main__':
