@@ -6,7 +6,6 @@ import logging
 import multiprocessing
 import sys
 import time
-from itertools import count
 from optparse import OptionParser
 
 from pysat.card import *
@@ -17,7 +16,7 @@ from pysat.card import *
 #
 # l'option -v vous permet de creer un mode 'verbose'
 # si l'option -t est active, alors le code execute uniquement la fonction test_code() implementee ci-dessous, qui vous permet de tester votre code avec des exemples deja fournis. Si l'execution d'un test prend plus que TIMEOUT secondes (fixe a 10s ci-dessous), alors le test s'arrete et la fonction passe au test suivant
-from src.folding import FoldingSolver
+from src.folding import FoldingSolver, FoldingSolution, FoldedProtein
 from src.sequence import Sequence
 from src.utils import get_max_score_bound_for_length
 
@@ -78,11 +77,12 @@ def exist_sol(seq, bound):
 def compute_max_score(seq):
     seq = Sequence(seq)
     solver = FoldingSolver(seq)
+    min_score = solver.sequence.get_flat_sequence_score()
     if incremental:
         max_bound = get_max_score_bound_for_length(seq.number_of_1s)
         solutions = []
 
-        for i in range(0, max_bound + 1):
+        for i in range(min_score, max_bound + 1):
             sol = solver.solve(i)
             if sol.is_sat:
                 solutions.append(sol)
@@ -98,12 +98,14 @@ def compute_max_score(seq):
 
     else:
         max_bound = get_max_score_bound_for_length(seq.number_of_1s)
-        min_bound = 0
-        solution = None
+        min_bound = min_score
+        solution = FoldingSolution(sequence=seq, bound=0, score=min_bound,
+                                   solution=FoldedProtein.from_straight_sequence(seq))
         while min_bound < max_bound:
             bound = (min_bound + max_bound) // 2
-            solution = solver.solve(bound)
-            if solution.is_sat:
+            res = solver.solve(bound)
+            if res.is_sat:
+                solution = res
                 min_bound = bound + 1
             else:
                 max_bound = bound
@@ -188,82 +190,82 @@ def test_code():
     total_maxscores = 0
     timeouts_maxscores = 0
     exceptions_maxscores = 0
-    #
-    # # sur cet ensemble de tests, votre methode devrait toujours retourner qu'il existe une solution
-    # print("\n****** Test de satisfiabilite ******\n")
-    # for (seq, maxbound) in examples:
-    #     # initialize queue
-    #     queue = multiprocessing.Queue()
-    #     queue.put(ret)
-    #     ret = queue.get()
-    #     ret["exist_sol"] = None
-    #     queue.put(ret)
-    #
-    #     # increase counter
-    #     total_sat_tests += 1
-    #     # set bound
-    #     bound = int(maxbound / 2)
-    #     print("sequence: " + seq + " borne: " + str(bound), end='')
-    #     sys.stdout.flush()
-    #
-    #     p = multiprocessing.Process(target=worker_exist_sol, args=(queue, seq, bound))
-    #     p.start()
-    #     p.join(timeout=TIMEOUT)
-    #
-    #     if p.exitcode is None:
-    #         print(" ---> timeout")
-    #         timeouts_sat_tests += 1
-    #         p.terminate()
-    #     else:
-    #         r = queue.get()["exist_sol"]
-    #         if isinstance(r, Exception):
-    #             exceptions_sat_tests += 1
-    #             print(" ---> exception raised")
-    #         else:
-    #             if r == True:
-    #                 sat_tests_success += 1
-    #                 print(" ---> succes")
-    #             else:
-    #                 sat_tests_failure += 1
-    #                 print(" ---> echec")
-    #
-    # # sur cet ensemble de tests, votre methode devrait toujours retourner qu'il n'existe pas de solution
-    # print("\n****** Test de d'insatisfiabilite ******\n")
-    # for (seq, maxbound) in examples:
-    #     # initialize queue
-    #     queue = multiprocessing.Queue()
-    #     queue.put(ret)
-    #     ret = queue.get()
-    #     ret["exist_sol"] = None
-    #     queue.put(ret)
-    #
-    #     # increase counter
-    #     total_unsat_tests += 1
-    #     # set bound
-    #     bound = maxbound + 1
-    #     print("sequence: " + seq + " borne: " + str(bound), end='')
-    #     sys.stdout.flush()
-    #
-    #     p = multiprocessing.Process(target=worker_exist_sol, args=(queue, seq, bound))
-    #     p.start()
-    #     p.join(timeout=TIMEOUT)
-    #
-    #     if p.exitcode is None:
-    #         print(" ---> timeout")
-    #         timeouts_unsat_tests += 1
-    #         p.terminate()
-    #     else:
-    #         r = queue.get()["exist_sol"]
-    #         if isinstance(r, Exception):
-    #             exceptions_unsat_tests += 1
-    #             print(" ---> exception raised")
-    #         else:
-    #             if r == True:
-    #                 unsat_tests_failure += 1
-    #                 print(" ---> echec")
-    #             else:
-    #                 unsat_tests_success += 1
-    #                 print(" ---> succes")
+
+    # sur cet ensemble de tests, votre methode devrait toujours retourner qu'il existe une solution
+    print("\n****** Test de satisfiabilite ******\n")
+    for (seq, maxbound) in examples:
+        # initialize queue
+        queue = multiprocessing.Queue()
+        queue.put(ret)
+        ret = queue.get()
+        ret["exist_sol"] = None
+        queue.put(ret)
+
+        # increase counter
+        total_sat_tests += 1
+        # set bound
+        bound = int(maxbound / 2)
+        print("sequence: " + seq + " borne: " + str(bound), end='')
+        sys.stdout.flush()
+
+        p = multiprocessing.Process(target=worker_exist_sol, args=(queue, seq, bound))
+        p.start()
+        p.join(timeout=TIMEOUT)
+
+        if p.exitcode is None:
+            print(" ---> timeout")
+            timeouts_sat_tests += 1
+            p.terminate()
+        else:
+            r = queue.get()["exist_sol"]
+            if isinstance(r, Exception):
+                exceptions_sat_tests += 1
+                print(" ---> exception raised")
+            else:
+                if r == True:
+                    sat_tests_success += 1
+                    print(" ---> succes")
+                else:
+                    sat_tests_failure += 1
+                    print(" ---> echec")
+
+    # sur cet ensemble de tests, votre methode devrait toujours retourner qu'il n'existe pas de solution
+    print("\n****** Test de d'insatisfiabilite ******\n")
+    for (seq, maxbound) in examples:
+        # initialize queue
+        queue = multiprocessing.Queue()
+        queue.put(ret)
+        ret = queue.get()
+        ret["exist_sol"] = None
+        queue.put(ret)
+
+        # increase counter
+        total_unsat_tests += 1
+        # set bound
+        bound = maxbound + 1
+        print("sequence: " + seq + " borne: " + str(bound), end='')
+        sys.stdout.flush()
+
+        p = multiprocessing.Process(target=worker_exist_sol, args=(queue, seq, bound))
+        p.start()
+        p.join(timeout=TIMEOUT)
+
+        if p.exitcode is None:
+            print(" ---> timeout")
+            timeouts_unsat_tests += 1
+            p.terminate()
+        else:
+            r = queue.get()["exist_sol"]
+            if isinstance(r, Exception):
+                exceptions_unsat_tests += 1
+                print(" ---> exception raised")
+            else:
+                if r == True:
+                    unsat_tests_failure += 1
+                    print(" ---> echec")
+                else:
+                    unsat_tests_success += 1
+                    print(" ---> succes")
 
     # sur cet ensemble de tests, votre methode devrait retourner le meilleur score. Vous pouvez utiliser la methode par dichotomie ou incrementale, au choix
     print("\n****** Test de calcul du meilleur score ******\n")
@@ -351,8 +353,11 @@ if __name__ == '__main__':
         # on affiche le score maximal qu'on calcule par dichotomie
         # on affiche egalement un plongement de score maximal si l'option d'affichage est active
         print("DEBUT DU CALCUL DU MEILLEUR SCORE PAR DICHOTOMIE")
-
+        start = time.perf_counter()
         print(compute_max_score(options.seq))
+        end = time.perf_counter()
+
+        print(f"Temps d'execution : {end - start}")
         print("FIN DU CALCUL DU MEILLEUR SCORE")
 
     elif not test:

@@ -24,7 +24,6 @@ from pysat.solvers import Glucose4
 from src import sequence, utils
 from src.encoder import Encoder
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -81,9 +80,8 @@ class FoldedProtein:
 
         return output
 
-
     @classmethod
-    def from_straight_sequence(cls, sequence: str) -> FoldedProtein:
+    def from_straight_sequence(cls, sequence: str | sequence.Sequence) -> FoldedProtein:
         """
         Create a FoldedProtein from a straight sequence.
         """
@@ -110,6 +108,7 @@ class FoldedProtein:
 class FoldingSolution:
     sequence: sequence.Sequence
     bound: int
+    score: Optional[int]
     solution: Optional[FoldedProtein]
 
     @property
@@ -154,56 +153,45 @@ class FoldingSolver:
         Convert a model to a solution.
         """
         if model is None:
-            return FoldingSolution(self.sequence, bound, None)
+            return FoldingSolution(self.sequence, bound, None, None)
 
         literals_set = set(model)
         protein_matrix = [[None] * self.sequence.n for _ in range(self.sequence.n)]
 
-        for i, j in itertools.product(range(self.sequence.n), repeat=2):
+        for i, j in itertools.product(range(self.sequence.n - 2), repeat=2):
             for value_idx, value in enumerate(self.sequence):
                 if encoder.get_literal(i, j, value_idx) in literals_set:
                     protein_matrix[i][j] = value if value is None else bool(int(value))
                     break
 
-        return FoldingSolution(self.sequence, bound, FoldedProtein(protein_matrix))
+        n_bonds = sum(1 for bond in encoder.bond_literals if bond in literals_set)
 
-
+        return FoldingSolution(self.sequence, bound, n_bonds, FoldedProtein(protein_matrix))
 
     def _test_for_trivial_cases(self, bound) -> Optional[FoldingSolution]:
         """
         Test for trivial cases where the sequence is already a solution.
-
-        >>> FoldingSolver(sequence.Sequence("1"))._test_for_trivial_cases(0)
-        FoldingSolution(sequence=Sequence('1'), bound=0, solution=FoldedProtein([[True]]))
-
-        >>> FoldingSolver(sequence.Sequence("1"))._test_for_trivial_cases(1)
-        FoldingSolution(sequence=Sequence('1'), bound=1, solution=None)
-
-        >>> FoldingSolver(sequence.Sequence("0"))._test_for_trivial_cases(0)
-        FoldingSolution(sequence=Sequence('0'), bound=0, solution=FoldedProtein([[False]]))
-
-        >>> FoldingSolver(sequence.Sequence('1' * 4))._test_for_trivial_cases(4)
-        FoldingSolution(sequence=Sequence('1111'), bound=4, solution=FoldedProtein([[True, True, True, True], [None, None, None, None], [None, None, None, None], [None, None, None, None]]))
-
         """
         if self.sequence.is_all_ones:
             if bound <= self.max_possible_score:
                 logger.info("Trivial solution: Sequence is all ones, and bound is less than max possible score.")
-                return FoldingSolution(self.sequence, bound, FoldedProtein.from_all_ones(self.sequence.n))
+                return FoldingSolution(self.sequence, bound, self.max_possible_score,
+                                       FoldedProtein.from_all_ones(self.sequence.n))
         elif self.sequence.is_all_zeros:
             if bound == 0:
                 logger.info("Trivial solution: Sequence is all zeros, and bound is 0.")
-                return FoldingSolution(self.sequence, bound, FoldedProtein.from_all_zeros(self.sequence.n))
-
-        if bound > self.max_possible_score:
-            logger.info("Trivial solution: Bound is greater than max possible score.")
-            return FoldingSolution(self.sequence, bound, None)
+                return FoldingSolution(self.sequence, bound, 0, FoldedProtein.from_all_zeros(self.sequence.n))
 
         assert (flat_sequence_score := self.sequence.get_flat_sequence_score()) <= self.max_possible_score
 
+        if bound > self.max_possible_score:
+            logger.info("Trivial solution: Bound is greater than max possible score.")
+            return FoldingSolution(self.sequence, bound, None, None)
+
         if flat_sequence_score >= bound:
             logger.info("Trivial solution: Flat sequence score is greater than bound.")
-            return FoldingSolution(self.sequence, bound, FoldedProtein.from_straight_sequence(self.sequence.sequence))
+            return FoldingSolution(self.sequence, bound, flat_sequence_score,
+                                   FoldedProtein.from_straight_sequence(self.sequence.sequence))
 
 
 if __name__ == "__main__":

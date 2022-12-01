@@ -11,6 +11,7 @@ Authors:
 
 This file contains the protein sequence class.
 """
+import functools
 
 from src import validators
 
@@ -22,30 +23,32 @@ class Sequence:
         self.sequence = sequence
 
         self._n = len(sequence)
-        self._n1s = self.sequence.count("1")
-        self._n0s = self.n - self.number_of_1s
-
 
     @property
     def n(self):
         return self._n
 
+    @functools.cached_property
+    def indices_of_1s(self):
+        return tuple(i for i, v in enumerate(self.sequence) if v == "1")
+
     @property
     def number_of_1s(self):
-        return self._n1s
+        return len(self.indices_of_1s)
 
     @property
     def number_of_0s(self):
-        return self._n0s
+        return self.n - self.number_of_1s
 
     @property
     def is_all_ones(self):
-        return self._n1s == self.n
+        return self.number_of_1s == self.n
 
     @property
     def is_all_zeros(self):
-        return self._n0s == self.n
+        return self.number_of_0s == self.n
 
+    @functools.lru_cache(maxsize=None)
     def get_flat_sequence_score(self):
         """
         Counts the number of adjacent 1s in the sequence.
@@ -74,6 +77,9 @@ class Sequence:
 
     def __eq__(self, other):
         return self.sequence == other.sequence
+
+    def __hash__(self):
+        return hash(self.sequence)
 
 
 if __name__ == "__main__":
