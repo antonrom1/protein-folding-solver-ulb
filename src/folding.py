@@ -15,11 +15,10 @@ from __future__ import annotations
 
 import itertools
 import logging
+import math
 import re
 from dataclasses import dataclass
 from typing import Optional, List
-
-from pysat.solvers import Glucose4
 
 from src import sequence, utils
 from src.encoder import Encoder
@@ -120,6 +119,14 @@ class FoldingSolution:
         return self.solution is None
 
 
+def solve_for_n(args):
+    n, seq, bound = args
+    logger.debug(f"Trying to solve for n={n}")
+    m = seq.n - n + 1
+    encoder = Encoder(seq, n, m, bound)
+    return encoder.solve()
+
+
 class FoldingSolver:
     def __init__(self, seq: sequence.Sequence):
         self._sequence = seq
@@ -137,16 +144,31 @@ class FoldingSolver:
         if (res := self._test_for_trivial_cases(bound)) is not None:
             return res
 
-        encoder = Encoder(self.sequence, bound)
-        cnf = encoder.cnf
+        # min_matrix_width = 2
 
-        solver = Glucose4(use_timer=True)
-        solver.append_formula(cnf)
-        solver.solve()
+        # min_n = min_matrix_width
+        # max_n = (self.sequence.n + 1) // 2
+        #
+        # if self.sequence.n == 4:
+        #     min_n = 2
+        #     max_n = 2
+        # elif self.sequence.n < 4:
+        #     raise ValueError("The sequence must be at least 4 long. (2x2 matrix). "
+        #                      "Trivial cases should be handled before.")
 
-        model = solver.get_model()
+        matrix_size = int(math.ceil(math.sqrt(self.sequence.n)) + 1)
 
-        return self._model_to_solution(model, bound, encoder)
+        encoder = Encoder(self.sequence, matrix_size, matrix_size, bound)
+        return encoder.solve()
+
+        # for n in range(max_n, min_n - 1, -1):
+        #     m = self.sequence.n - n + 1
+        #     if m < n:
+        #         break
+        #     encoder = Encoder(self.sequence, n, m, bound)
+        #     if (sol := encoder.solve()).is_sat:
+        #         return sol
+        # return FoldingSolution(self.sequence, bound, None, None)
 
     def _model_to_solution(self, model: List[int], bound: int, encoder: Encoder) -> FoldingSolution:
         """

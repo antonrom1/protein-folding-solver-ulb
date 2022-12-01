@@ -14,9 +14,10 @@ This file contains the SAT encoder class.
 import itertools
 import logging
 
-from pysat.card import CNF, IDPool, CardEnc
+from pysat.card import CNF, IDPool, CardEnc, EncType
+from pysat.solvers import MapleCM, Glucose4
 
-from src import sequence
+from src import sequence, folding
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +36,17 @@ def clauses_logging_description(condition_description):
 
 
 class Encoder:
-    def __init__(self, seq: sequence.Sequence, bound):
+    def __init__(self, seq: sequence.Sequence, n, m, bound):
         self.sequence = seq
         self.bound = bound
 
         # we do not need to create a matrix of size n x n because
         # if the flat sequence already has the necessary score, the trivial cases checks will be enough
-        self._min_width = 2
-        self._n = len(self.sequence) - self._min_width
+        self._n = n
+        self._m = m
+
+        # assert self._n + self._m - 1 <= self.sequence.n, "The matrix is too big for the sequence"
+        # assert self._n * self._m >= self.sequence.n, "The matrix is too small for the sequence"
 
         self._bond_literals = []
 
@@ -51,15 +55,45 @@ class Encoder:
 
         self._sequence_indices = set(range(len(self.sequence)))
         self._matrix_variables = self._sequence_indices | {None}
+        self._matrix_positions = set(itertools.product(range(self.n), range(self.m)))
 
         self._init_grid_constraints()
         self._cnf.extend(self._add_at_least_bound_bonds_constraint())
 
         logger.info(f"initialized encoder with {len(self._cnf.clauses)} clauses")
 
+    def solve(self):
+        solver = Glucose4(bootstrap_with=self.cnf.clauses)
+        solver.solve()
+        return self._model_to_solution(solver.get_model())
+
+    def _model_to_solution(self, model) -> 'folding.FoldingSolution':
+        """
+        Convert a model to a solution.
+        """
+        if model is None:
+            return folding.FoldingSolution(self.sequence, self.bound, None, None)
+
+        literals_set = set(model)
+        protein_matrix = [[None] * self.sequence.n for _ in range(self.sequence.n)]
+
+        for i, j in itertools.product(range(self.sequence.n - 2), repeat=2):
+            for value_idx, value in enumerate(self.sequence):
+                if self.get_literal(i, j, value_idx) in literals_set:
+                    protein_matrix[i][j] = value if value is None else bool(int(value))
+                    break
+
+        n_bonds = sum(1 for bond in self.bond_literals if bond in literals_set)
+
+        return folding.FoldingSolution(self.sequence, self.bound, n_bonds, folding.FoldedProtein(protein_matrix))
+
     @property
     def n(self):
         return self._n
+
+    @property
+    def m(self):
+        return self._m
 
     @property
     def cnf(self):
@@ -79,10 +113,20 @@ class Encoder:
 
     @clauses_logging_description("every matrix position has only one value")
     def _one_value_per_position(self):
+        # clauses = []
+        # for i, j in self._matrix_positions:
+        #     possible_literals = [self._idp.id((i, j, v)) for v in self._matrix_variables]
+        #     clauses.extend(CardEnc.equals(possible_literals, 1, vpool=self._idp))
+        # return clauses
+
         clauses = []
-        for i, j in itertools.product(range(self._n), repeat=2):
-            possible_literals = [self._idp.id((i, j, v)) for v in self._matrix_variables]
-            clauses.extend(CardEnc.equals(possible_literals, 1, vpool=self._idp))
+        for i, j in self._matrix_positions:
+            clauses.append([self._idp.id((i, j, v)) for v in self._matrix_variables])
+
+        # at most one value per position
+        for i, j in self._matrix_positions:
+            for v1, v2 in itertools.combinations(self._matrix_variables, 2):
+                clauses.append([-self._idp.id((i, j, v1)), -self._idp.id((i, j, v2))])
         return clauses
 
     @clauses_logging_description("every value (except None) appears only once in the matrix")
@@ -91,7 +135,7 @@ class Encoder:
         for v in self._sequence_indices:
             clauses.extend(
                 CardEnc.equals(
-                    [self._idp.id((i, j, v)) for i, j in itertools.product(range(self._n), repeat=2)],
+                    [self._idp.id((i, j, v)) for i, j in self._matrix_positions],
                     1,
                     vpool=self._idp
                 )
@@ -101,7 +145,7 @@ class Encoder:
     @clauses_logging_description("every value is adjacent to its neighbours in the sequence")
     def _sequence_values_adjacent(self):
         clauses = []
-        for i, j in itertools.product(range(self._n), repeat=2):
+        for i, j in self._matrix_positions:
             # TODO: this can be optimized by skipping 1/2 of the values because they are already checked
             for v in range(1, len(self.sequence) - 1):
                 # [(i, j, v) => [(i - 1, j, v - 1) | (i + 1, j, v - 1) | (i, j - 1, v - 1) | (i, j + 1, v - 1)]]
@@ -111,7 +155,7 @@ class Encoder:
                 v1m1_clause = [-self._idp.id((i, j, v))]
 
                 for i2, j2 in [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]:
-                    if 0 <= i2 < self._n and 0 <= j2 < self._n:
+                    if 0 <= i2 < self._n and 0 <= j2 < self._m:
                         v1p1_clause.append(self._idp.id((i2, j2, v - 1)))
                         v1m1_clause.append(self._idp.id((i2, j2, v + 1)))
                 clauses.append(v1m1_clause)
@@ -122,14 +166,14 @@ class Encoder:
     @clauses_logging_description("there are at least 'bound' bonds")
     def _add_at_least_bound_bonds_constraint(self):
         clauses = []
-        for i, j in itertools.product(range(self._n), repeat=2):
+        for i, j in self._matrix_positions:
 
             if (i + j) % 2 == 0:
-                # this is a little optimization to avoid checking the same clauses twice
+                # avoid checking the same clauses twice
                 continue
 
             adjacent_positions = filter(
-                lambda all_positions: all(0 <= p < self._n for p in all_positions),
+                lambda pos: 0 <= pos[0] < self._n and 0 <= pos[1] < self._m,
                 ((i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1))
             )
 
@@ -138,11 +182,9 @@ class Encoder:
                     a = self._idp.id((i, j, v1))
                     b = self._idp.id((i2, j2, v2))
                     c = self._idp.id(((i, i2), (j, j2), (v1, v2)))
-
                     # (a & b) <=> c
                     # cnf: (¬c ∨ a) ∧ (¬c ∨ b) ∧ (¬a ∨ ¬b ∨ c)
                     clauses.extend([[-c, a], [-c, b], [a, b, -c]])
                     self._bond_literals.append(c)
-
         clauses.extend(CardEnc.atleast(self._bond_literals, self.bound, vpool=self._idp))
         return clauses

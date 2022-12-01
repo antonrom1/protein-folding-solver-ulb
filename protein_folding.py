@@ -16,7 +16,7 @@ from pysat.card import *
 #
 # l'option -v vous permet de creer un mode 'verbose'
 # si l'option -t est active, alors le code execute uniquement la fonction test_code() implementee ci-dessous, qui vous permet de tester votre code avec des exemples deja fournis. Si l'execution d'un test prend plus que TIMEOUT secondes (fixe a 10s ci-dessous), alors le test s'arrete et la fonction passe au test suivant
-from src.folding import FoldingSolver, FoldingSolution, FoldedProtein
+from src import folding
 from src.sequence import Sequence
 from src.utils import get_max_score_bound_for_length
 
@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 def exist_sol(seq, bound):
     """return True if there is a solution with score >= bound"""
     sequence = Sequence(seq)
-    sol = FoldingSolver(sequence).solve(bound)
+    sol = folding.FoldingSolver(sequence).solve(bound)
     if options.affichage_sol:
         if sol.is_sat:
             print(sol.solution)
@@ -76,7 +76,7 @@ def exist_sol(seq, bound):
 
 def compute_max_score(seq):
     seq = Sequence(seq)
-    solver = FoldingSolver(seq)
+    solver = folding.FoldingSolver(seq)
     min_score = solver.sequence.get_flat_sequence_score()
     if incremental:
         max_bound = get_max_score_bound_for_length(seq.number_of_1s)
@@ -99,8 +99,8 @@ def compute_max_score(seq):
     else:
         max_bound = get_max_score_bound_for_length(seq.number_of_1s)
         min_bound = min_score
-        solution = FoldingSolution(sequence=seq, bound=0, score=min_bound,
-                                   solution=FoldedProtein.from_straight_sequence(seq))
+        solution = folding.FoldingSolution(sequence=seq, bound=0, score=min_bound,
+                                           solution=folding.FoldedProtein.from_straight_sequence(seq))
         while min_bound < max_bound:
             bound = (min_bound + max_bound) // 2
             res = solver.solve(bound)
@@ -154,7 +154,7 @@ def worker_max_score(queue, seq):
 
 def test_code():
     examples = [('00', 0), ('1', 0), ('01000', 0), ('00110000', 1), ('11', 1), ('111', 2), ('1111', 4), ('1111111', 8),
-                ("111111111111111", 22), ("1011011011", 7), ("011010111110011", 12), ("01101011111000101", 11),
+                ("111111111111111", 22), ("1011011011", 7), ("011010111110011", 13), ("01101011111000101", 11),
                 ("0110111001000101", 8), ("000000000111000000110000000", 5), ('100010100', 0),
                 ('01101011111110111', 17), ('10', 0), ('10', 0), ('001', 0), ('000', 0), ('1001', 1), ('1111', 4),
                 ('00111', 2), ('01001', 1), ('111010', 3), ('110110', 3), ('0010110', 2), ('0000001', 0),
