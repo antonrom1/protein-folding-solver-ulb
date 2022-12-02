@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional, List
 
-from src import sequence, utils
+from src import sequence
 from src.encoder import Encoder
 
 logger = logging.getLogger(__name__)
@@ -102,6 +102,51 @@ class FoldedProtein:
         """
         return cls.from_straight_sequence("0" * n)
 
+    @classmethod
+    def build_best_solution_for_all_ones(cls, n: int) -> FoldedProtein:
+        """
+        Build the best solution for a sequence of all ones.
+
+        The solution is built according to the following rules specified here:
+        https://www.irit.fr/~Jean-Michel.Hautiere/teaching/2021-2022/InfoFond/Projet/Projet.html#solution-optimale-pour-une-s
+        https://oeis.org/A000041
+        """
+        matrix_size = math.ceil(n ** 0.5) + 1
+        matrix = [[None] * matrix_size for _ in range(matrix_size)]
+
+        # first we build a square with a side length of sqrt(n)
+        biggest_square_that_fits = int(math.sqrt(n))
+        for i in range(biggest_square_that_fits):
+            for j in range(biggest_square_that_fits):
+                matrix[i][j] = '1'
+
+
+        remaining_ones = n - biggest_square_that_fits ** 2
+
+        assert remaining_ones <= 2 * biggest_square_that_fits
+
+        # then we add the remaining ones
+        # first we add min(remaining_ones, biggest_square_that_fits) ones at the bottom
+
+        for i in range(min(remaining_ones, biggest_square_that_fits)):
+            matrix[biggest_square_that_fits][i] = '1'
+            remaining_ones -= 1
+            if remaining_ones == 0:
+                break
+
+        # then we add the remaining ones at the right
+        for i in range(remaining_ones):
+            matrix[i][biggest_square_that_fits] = '1'
+            remaining_ones -= 1
+            if remaining_ones == 0:
+                break
+
+        assert remaining_ones == 0
+
+        return cls(matrix)
+
+
+
 
 @dataclass
 class FoldingSolution:
@@ -130,7 +175,7 @@ def solve_for_n(args):
 class FoldingSolver:
     def __init__(self, seq: sequence.Sequence):
         self._sequence = seq
-        self._max_possible_bound = utils.get_max_score_bound_for_length(self.sequence.number_of_1s)
+        self._max_possible_bound = self.sequence.max_score_bound
 
     @property
     def sequence(self):
@@ -144,31 +189,12 @@ class FoldingSolver:
         if (res := self._test_for_trivial_cases(bound)) is not None:
             return res
 
-        # min_matrix_width = 2
 
-        # min_n = min_matrix_width
-        # max_n = (self.sequence.n + 1) // 2
-        #
-        # if self.sequence.n == 4:
-        #     min_n = 2
-        #     max_n = 2
-        # elif self.sequence.n < 4:
-        #     raise ValueError("The sequence must be at least 4 long. (2x2 matrix). "
-        #                      "Trivial cases should be handled before.")
-
-        matrix_size = int(math.ceil(math.sqrt(self.sequence.n)) + 1)
+        matrix_size = int(math.ceil(self.sequence.n ** (2/3)))
+            #1 + self.sequence.n // 4 if self.sequence.n >= 12 else self.sequence.n
 
         encoder = Encoder(self.sequence, matrix_size, matrix_size, bound)
         return encoder.solve()
-
-        # for n in range(max_n, min_n - 1, -1):
-        #     m = self.sequence.n - n + 1
-        #     if m < n:
-        #         break
-        #     encoder = Encoder(self.sequence, n, m, bound)
-        #     if (sol := encoder.solve()).is_sat:
-        #         return sol
-        # return FoldingSolution(self.sequence, bound, None, None)
 
     def _model_to_solution(self, model: List[int], bound: int, encoder: Encoder) -> FoldingSolution:
         """
@@ -197,8 +223,9 @@ class FoldingSolver:
         if self.sequence.is_all_ones:
             if bound <= self.max_possible_score:
                 logger.info("Trivial solution: Sequence is all ones, and bound is less than max possible score.")
+                # assert False, "Bad solution"
                 return FoldingSolution(self.sequence, bound, self.max_possible_score,
-                                       FoldedProtein.from_all_ones(self.sequence.n))
+                                       FoldedProtein.build_best_solution_for_all_ones(self.sequence.n))
         elif self.sequence.is_all_zeros:
             if bound == 0:
                 logger.info("Trivial solution: Sequence is all zeros, and bound is 0.")

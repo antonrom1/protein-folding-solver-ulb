@@ -113,12 +113,6 @@ class Encoder:
 
     @clauses_logging_description("every matrix position has only one value")
     def _one_value_per_position(self):
-        # clauses = []
-        # for i, j in self._matrix_positions:
-        #     possible_literals = [self._idp.id((i, j, v)) for v in self._matrix_variables]
-        #     clauses.extend(CardEnc.equals(possible_literals, 1, vpool=self._idp))
-        # return clauses
-
         clauses = []
         for i, j in self._matrix_positions:
             clauses.append([self._idp.id((i, j, v)) for v in self._matrix_variables])
@@ -179,12 +173,12 @@ class Encoder:
 
             for i2, j2 in adjacent_positions:
                 for v1, v2 in itertools.permutations(self.sequence.indices_of_1s, 2):
-                    a = self._idp.id((i, j, v1))
-                    b = self._idp.id((i2, j2, v2))
-                    c = self._idp.id(((i, i2), (j, j2), (v1, v2)))
+                    cell = self._idp.id((i, j, v1))
+                    adjacent_cell = self._idp.id((i2, j2, v2))
+                    bond = self._idp.id(((i, i2), (j, j2), (v1, v2)))
                     # (a & b) <=> c
                     # cnf: (¬c ∨ a) ∧ (¬c ∨ b) ∧ (¬a ∨ ¬b ∨ c)
-                    clauses.extend([[-c, a], [-c, b], [a, b, -c]])
-                    self._bond_literals.append(c)
+                    clauses.extend([[-bond, cell], [-bond, adjacent_cell]])
+                    self._bond_literals.append(bond)
         clauses.extend(CardEnc.atleast(self._bond_literals, self.bound, vpool=self._idp))
         return clauses

@@ -18,7 +18,6 @@ from pysat.card import *
 # si l'option -t est active, alors le code execute uniquement la fonction test_code() implementee ci-dessous, qui vous permet de tester votre code avec des exemples deja fournis. Si l'execution d'un test prend plus que TIMEOUT secondes (fixe a 10s ci-dessous), alors le test s'arrete et la fonction passe au test suivant
 from src import folding
 from src.sequence import Sequence
-from src.utils import get_max_score_bound_for_length
 
 ##### OPTIONS POUR L'UTILISATION EN LIGNE DE COMMANDE ###############
 # Usage: folder.py [options]
@@ -79,7 +78,7 @@ def compute_max_score(seq):
     solver = folding.FoldingSolver(seq)
     min_score = solver.sequence.get_flat_sequence_score()
     if incremental:
-        max_bound = get_max_score_bound_for_length(seq.number_of_1s)
+        max_bound = seq.max_score_bound
         solutions = []
 
         for i in range(min_score, max_bound + 1):
@@ -97,7 +96,7 @@ def compute_max_score(seq):
         return solution.bound
 
     else:
-        max_bound = get_max_score_bound_for_length(seq.number_of_1s)
+        max_bound = seq.max_score_bound
         min_bound = min_score
         solution = folding.FoldingSolution(sequence=seq, bound=0, score=min_bound,
                                            solution=folding.FoldedProtein.from_straight_sequence(seq))
@@ -349,20 +348,12 @@ if __name__ == '__main__':
         else:
             print("UNSAT")
 
-    elif not (incremental):
-        # on affiche le score maximal qu'on calcule par dichotomie
-        # on affiche egalement un plongement de score maximal si l'option d'affichage est active
-        print("DEBUT DU CALCUL DU MEILLEUR SCORE PAR DICHOTOMIE")
-        start = time.perf_counter()
-        print(compute_max_score(options.seq))
-        end = time.perf_counter()
-
-        print(f"Temps d'execution : {end - start}")
-        print("FIN DU CALCUL DU MEILLEUR SCORE")
-
     elif not test:
         # Pareil que dans le cas precedent mais avec la methode incrementale
         # A COMPLETER
-        print("DEBUT DU CALCUL DU MEILLEUR SCORE PAR METHODE INCREMENTALE")
-        print(compute_max_score(options.seq))
+        print(f"DEBUT DU CALCUL DU MEILLEUR SCORE PAR METHODE {'INCREMENTALE' if options.incremental else 'DICHOTOMIQUE'}")
+        start_time = time.perf_counter()
+        print(f"Score maximal pour la sequence {options.seq} : {compute_max_score(options.seq)}")
+        end_time = time.perf_counter()
+        print(f"Temps total pour le calcul du meilleur score: {end_time - start_time} sec")
         print("FIN DU CALCUL DU MEILLEUR SCORE")

@@ -12,6 +12,7 @@ Authors:
 This file contains the protein sequence class.
 """
 import functools
+import math
 
 from src import validators
 
@@ -47,6 +48,28 @@ class Sequence:
     @property
     def is_all_zeros(self):
         return self.number_of_0s == self.n
+
+    @property
+    def max_score_bound(self):
+        """
+        Get the maximum score bound for a sequence of length n.
+        The maximum score bound can only be reached if the sequence is all 1s and arranged as such:
+
+        If one constructs a square (square 1) and then draws another square of identical size beside it (square 2),
+        the squares share 1 edge. If one then places an identical square above square 2
+        (instead of continuing in a straight path), there are now 2 shared edges.
+        Continuing this pattern in an outward spiral, one finds that the number of shared edges is 4, 5, 7,
+
+        For more information, see https://oeis.org/A123663.
+
+        :return: the maximum score bound
+
+        >>> [Sequence('1' * i).max_score_bound for i in range(1, 26)]
+        [0, 1, 2, 4, 5, 7, 8, 10, 12, 13, 15, 17, 18, 20, 22, 24, 25, 27, 29, 31, 32, 34, 36, 38, 40]
+        """
+
+        # implementation by Chai Wah Wu, Jul 28 2022, https://oeis.org/A123663
+        return (m := self.number_of_1s << 1) - 1 - math.isqrt((m << 1) - 1) if self.number_of_1s > 0 else 0
 
     @functools.lru_cache(maxsize=None)
     def get_flat_sequence_score(self):
