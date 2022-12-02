@@ -16,8 +16,8 @@ from __future__ import annotations
 import itertools
 import logging
 import math
-import re
 from dataclasses import dataclass
+from textwrap import dedent
 from typing import Optional, List
 
 from src import sequence
@@ -56,26 +56,10 @@ class FoldedProtein:
 
         # if we have empty lines in the beginning or end, remove them
 
-        output = output.splitlines()
-
-        # remove empty lines in the beginning
-        while output and re.match(r'^\s*$', output[0]):
-            output.pop(0)
-
-        # remove empty lines in the end
-        while output and re.match(r'^\s*$', output[-1]):
-            output.pop()
-
-        output = "\n".join(output)
-
-        # remove empty rows on the left and right
-        # find min amount of spaces on the left and right
-        min_spaces_left = min(len(row) - len(row.lstrip()) for row in output.splitlines())
-        min_spaces_right = min(len(row) - len(row.rstrip()) for row in output.splitlines())
-
-        # remove the spaces
-        output = "\n".join(
-            row[min_spaces_left:(-min_spaces_right) if min_spaces_right else None] for row in output.splitlines())
+        # reduce the empty spaces
+        output = dedent(output)
+        output = '\n'.join(map(str.rstrip, output.split('\n')))
+        output = output.strip('\n')
 
         return output
 
@@ -120,7 +104,6 @@ class FoldedProtein:
             for j in range(biggest_square_that_fits):
                 matrix[i][j] = '1'
 
-
         remaining_ones = n - biggest_square_that_fits ** 2
 
         assert remaining_ones <= 2 * biggest_square_that_fits
@@ -144,8 +127,6 @@ class FoldedProtein:
         assert remaining_ones == 0
 
         return cls(matrix)
-
-
 
 
 @dataclass
@@ -189,9 +170,8 @@ class FoldingSolver:
         if (res := self._test_for_trivial_cases(bound)) is not None:
             return res
 
-
-        matrix_size = int(math.ceil(self.sequence.n ** (2/3)))
-            #1 + self.sequence.n // 4 if self.sequence.n >= 12 else self.sequence.n
+        matrix_size = int(math.ceil(self.sequence.n ** (2 / 3)))
+        # 1 + self.sequence.n // 4 if self.sequence.n >= 12 else self.sequence.n
 
         encoder = Encoder(self.sequence, matrix_size, matrix_size, bound)
         return encoder.solve()
