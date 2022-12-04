@@ -131,6 +131,9 @@ class FoldedProtein:
 
 @dataclass
 class FoldingSolution:
+    """
+    FoldingSolution is a class that represents a solution to the protein folding problem.
+    """
     sequence: sequence.Sequence
     bound: int
     score: Optional[int]
@@ -154,6 +157,11 @@ def solve_for_n(args):
 
 
 class FoldingSolver:
+    """
+    FoldingSolver is a class that solves the protein folding problem.
+    In addition to the encoding the problem with Encoder,
+    it also contains the logic to solve trivial cases in a more efficient way.
+    """
     def __init__(self, seq: sequence.Sequence):
         self._sequence = seq
         self._max_possible_bound = self.sequence.max_score_bound
