@@ -183,26 +183,6 @@ class FoldingSolver:
         encoder = Encoder(self.sequence, matrix_size, matrix_size, bound)
         return encoder.solve()
 
-    def _model_to_solution(self, model: List[int], bound: int, encoder: Encoder) -> FoldingSolution:
-        """
-        Convert a model to a solution.
-        """
-        if model is None:
-            return FoldingSolution(self.sequence, bound, None, None)
-
-        literals_set = set(model)
-        protein_matrix = [[None] * self.sequence.n for _ in range(self.sequence.n)]
-
-        for i, j in itertools.product(range(self.sequence.n - 2), repeat=2):
-            for value_idx, value in enumerate(self.sequence):
-                if encoder.get_literal(i, j, value_idx) in literals_set:
-                    protein_matrix[i][j] = value if value is None else bool(int(value))
-                    break
-
-        n_bonds = sum(1 for bond in encoder.bond_literals if bond in literals_set)
-
-        return FoldingSolution(self.sequence, bound, n_bonds, FoldedProtein(protein_matrix))
-
     def _test_for_trivial_cases(self, bound) -> Optional[FoldingSolution]:
         """
         Test for trivial cases where the sequence is already a solution.
