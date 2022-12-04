@@ -140,7 +140,6 @@ class Encoder:
     def _sequence_values_adjacent(self):
         clauses = []
         for i, j in self._matrix_positions:
-            # TODO: this can be optimized by skipping 1/2 of the values because they are already checked
             for v in range(1, len(self.sequence) - 1):
                 # [(i, j, v) => [(i - 1, j, v - 1) | (i + 1, j, v - 1) | (i, j - 1, v - 1) | (i, j + 1, v - 1)]]
                 # a => (b | c | d | e) <=> !a | b | c | d | e
@@ -176,8 +175,7 @@ class Encoder:
                     cell = self._idp.id((i, j, v1))
                     adjacent_cell = self._idp.id((i2, j2, v2))
                     bond = self._idp.id(((i, i2), (j, j2), (v1, v2)))
-                    # (a & b) <=> c
-                    # cnf: (¬c ∨ a) ∧ (¬c ∨ b) ∧ (¬a ∨ ¬b ∨ c)
+                    # (cell & adjacent_cell) <=> bond
                     clauses.extend([[-bond, cell], [-bond, adjacent_cell]])
                     self._bond_literals.append(bond)
         clauses.extend(CardEnc.atleast(self._bond_literals, self.bound, vpool=self._idp))
