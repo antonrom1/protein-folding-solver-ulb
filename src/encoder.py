@@ -115,12 +115,7 @@ class Encoder:
     def _one_value_per_position(self):
         clauses = []
         for i, j in self._matrix_positions:
-            clauses.append([self._idp.id((i, j, v)) for v in self._matrix_variables])
-
-        # at most one value per position
-        for i, j in self._matrix_positions:
-            for v1, v2 in itertools.combinations(self._matrix_variables, 2):
-                clauses.append([-self._idp.id((i, j, v1)), -self._idp.id((i, j, v2))])
+            clauses.extend(CardEnc.equals([self._idp.id((i, j, v)) for v in self._matrix_variables], 1, vpool=self._idp))
         return clauses
 
     @clauses_logging_description("every value (except None) appears only once in the matrix")
@@ -175,7 +170,7 @@ class Encoder:
                     cell = self._idp.id((i, j, v1))
                     adjacent_cell = self._idp.id((i2, j2, v2))
                     bond = self._idp.id(((i, i2), (j, j2), (v1, v2)))
-                    # (cell & adjacent_cell) <=> bond
+                    # bond => (cell & adjacent_cell)
                     clauses.extend([[-bond, cell], [-bond, adjacent_cell]])
                     self._bond_literals.append(bond)
         clauses.extend(CardEnc.atleast(self._bond_literals, self.bound, vpool=self._idp))
