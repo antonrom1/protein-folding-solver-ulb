@@ -92,7 +92,6 @@ class FoldedProtein:
         Build the best solution for a sequence of all ones.
 
         The solution is built according to the following rules specified here:
-        https://www.irit.fr/~Jean-Michel.Hautiere/teaching/2021-2022/InfoFond/Projet/Projet.html#solution-optimale-pour-une-s
         https://oeis.org/A000041
         """
         matrix_size = math.ceil(n ** 0.5) + 1
